@@ -59,6 +59,12 @@ options:
     required: false
     default: 'INFINITY'
     type: str
+  influence:
+    description:
+      - constraint influence
+    required: false
+    default: true
+    type: bool
   cib_file:
     description:
       - "Apply changes to specified file containing cluster CIB instead of running cluster."
@@ -107,6 +113,7 @@ def run_module():
             resource1_role=dict(required=False, choices=['Master', 'Slave', 'Started'], default='Started'),
             resource2_role=dict(required=False, choices=['Master', 'Slave', 'Started'], default='Started'),
             score=dict(required=False, default="INFINITY"),
+            influence=dict(required=False, type='bool', default=True),
             cib_file=dict(required=False),
         ),
         supports_check_mode=True
@@ -118,6 +125,7 @@ def run_module():
     resource1_role = module.params['resource1_role']
     resource2_role = module.params['resource2_role']
     score = module.params['score']
+    influence = 'true' if module.params['influence'] else 'false'
     cib_file = module.params['cib_file']
 
     result = {}
@@ -181,18 +189,18 @@ def run_module():
         if resource1_role != 'Started' and resource2_role != 'Started':
             cmd_create = """ pcs %(cib_file_param)s constraint colocation
                              add %(resource1_role)s %(resource1)s
-                             with %(resource2_role)s %(resource2)s %(score)s """ % module.params
+                             with %(resource2_role)s %(resource2)s %(score)s influence=%(influence)s """ % module.params
         elif resource1_role != 'Started' and resource2_role == 'Started':
             cmd_create = """ pcs %(cib_file_param)s constraint colocation
                              add %(resource1_role)s %(resource1)s
-                             with %(resource2)s %(score)s """ % module.params
+                             with %(resource2)s %(score)s influence=%(influence)s """ % module.params
         elif resource1_role == 'Started' and resource2_role != 'Started':
             cmd_create = """ pcs %(cib_file_param)s constraint colocation
                              add %(resource1)s
-                             with %(resource2_role)s %(resource2)s %(score)s """ % module.params
+                             with %(resource2_role)s %(resource2)s %(score)s influence=%(influence)s """ % module.params
     else:
         cmd_create = """ pcs %(cib_file_param)s constraint colocation
-                         add %(resource1)s with %(resource2)s %(score)s """ % module.params
+                         add %(resource1)s with %(resource2)s %(score)s influence=%(influence)s """ % module.params
 
     # colocation constraint deletion command
     if constraint is not None:
@@ -210,7 +218,7 @@ def run_module():
 
     elif state == 'present' and constraint is not None:
         # constraint should be present, lets see if it has different score from requested, if yes, then we do update
-        if constraint.attrib.get('score', 'INFINITY') != score:
+        if (constraint.attrib.get('score', 'INFINITY') != score) or (constraint.attrib.get('influence', 'true') != influence) :
             result['changed'] = True
             if not module.check_mode:
                 rc, out, err = module.run_command(cmd_delete)
